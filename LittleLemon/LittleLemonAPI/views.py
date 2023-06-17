@@ -10,6 +10,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
+import secrets
+import string
+import json
 
 # Models and global variables
 user_model = get_user_model()
@@ -125,8 +128,8 @@ class ListCreateDeleteCartItems(generics.ListCreateAPIView, generics.DestroyAPIV
 # Order Management Endpoints 
 ##################################
 
-@api_view['GET','POST']
-@permission_classes[IsAuthenticated]
+@api_view(['GET','POST'])
+@permission_classes([IsAuthenticated])
 # Multiple Orders 
 def ListCreateOrders(request):
     username = request.username
@@ -189,3 +192,66 @@ def ListCreateOrders(request):
         return Response(serializer.data,status=status.HTTP_400_BAD_REQUEST)
     
 # A specific order
+@api_view(['GET','PUT','PATCH','DELETE'])
+@permission_classes([IsAuthenticated])
+
+def DeleteUpdateView(request, pk):
+    username = request.username
+    is_manager = User.objects.filter(username=username, groups__name__int=['Manager'])
+    is_delivery = User.objects.filter(username=username, groups__name__int=['Delivery'])
+    user = get_object_or_404(User, username=username)
+    order = get_object_or_404(Order, pk=pk)
+    # Manager permissions: Delete order, get all orders, assign a crew
+    # member to a specific order
+    if is_manager:
+        if request.method == 'PUT':
+            # Check if the delivery staff ID is provided in the
+            # request body
+            delivery_staff_id = request.data.get('delivery_crew')
+            if delivery_staff_id is not None:
+                # Retrieve the delivery staff user order 
+                delivery_staff = get_object_or_404(User, p=delivery_staff_id)
+                
+                # Assign the delivery staff for the order
+                order.delivey_crew = delivery_staff
+                order.save()
+
+                serializer = OrderSerializer(order)
+                return Response(serializer.data)
+        # Update the order status: (0) for out of delivery (1) for delivered
+        if request.method == 'PATCH':
+            order.status = request.data.get('status')
+            order.save()
+            serializer = OrderSerializer(order)
+            return Response(serializer.data)
+                # Remove the order from the server
+        if request.method == 'DELETE': 
+            order.delete()
+            return Response({'message':'record deleted'}, status.HTTP_200_OK)
+        return Response(status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    if is_delivery:
+        if request.method == 'PATCH':
+            order.status = request.data.get('status')
+            order.save()
+            return Response({'message':'Succesfully updated'}, status.HTTP_202_ACCEPTED)
+         
+    # Customer permissions: view and update their orders
+    else: 
+        if request.method == 'GET':
+            if user == order.user:
+                serializer = OrderSerializer(order)
+                return Response(serializer.data)
+            return Response({'message':'Not allowed to view this item'}, status.HTTP_401_UNAUTHORIZED)
+
+##################################
+# Utilities
+##################################
+
+@api_view(['GET'])
+def generate_random_user(request):
+    username_chars = string.ascii_letters + string.digits
+    password_chars = string.ascii_letters + string.digits + string.punctuation
+    random_username = ''.join(secrets.choice(username_chars) for i in range(8))
+    random_password = ''.join(secrets.choice(password_chars) for i in range(12))
+    return Response({'username':random_username, 'password':random_password})
