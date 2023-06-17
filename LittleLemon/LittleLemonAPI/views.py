@@ -9,6 +9,7 @@ from .serializers import *
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 
 # Models and global variables
 user_model = get_user_model()
@@ -123,6 +124,10 @@ class ListCreateDeleteCartItems(generics.ListCreateAPIView, generics.DestroyAPIV
 ##################################
 # Order Management Endpoints 
 ##################################
+
+@api_view['GET','POST']
+@permission_classes[IsAuthenticated]
+# Multiple Orders 
 def ListCreateOrders(request):
     username = request.username
     is_manager = User.objects.filter(username=username, groups__name__int=['Manager'])
@@ -134,10 +139,10 @@ def ListCreateOrders(request):
             orders = Order.objects.all()
             serializer = OrderSerializer(orders, many=True)
             return Response(serializer.data)
-    # Delivery permissions: View orders assigned to them
+    # Delivery permissions: View orders assigned to them that haven't been delivered
     elif is_delivery: 
         if request.method == 'GET':
-            orders = Order.objects.get(delivery_crew=user.pk)
+            orders = Order.objects.get(delivery_crew=user.pk, status=False)
             serializer = OrderSerializer(orders, many=True)
             return Response(serializer.data)
     # Client permissions: View and edit their own orders
@@ -147,9 +152,40 @@ def ListCreateOrders(request):
             serializer = OrderSerializer(orders, many=True)
             return Response(serializer.data)
         if request.method == 'POST':
-            orders = Cart.objects.get(user = user.pk)
-            serializer = OrderSerializer(data = orders, many=True)
+            try: 
+                # Retrieve the latest Order with a False status
+                latest_order = Order.objects.filter(user=user.pk)
+            except ObjectDoesNotExist:
+                latest_order = Order.objects.create(user=user.pk, status=False)
+            # TODO Test if the following link works for all existing users
+            # Retrieve items from the current car. Link : Foreign ley
+            cart = Cart.objects.get(user = user.pk)
+            # Temporary list to store all the current items from the user's cart
+            order_items = []
+            # Retrive the latest order. 
+            # IMPORTANT: The latest order will have a False status, which means
+            # that order hasn't been delivererd yet.
+            latest_order = Order.objects.get(user=user.pk, status=False)
+            for order_item in cart:
+                new_order_item = OrderItem(
+                    # TODO Test case: if there's an existing order associated to the user
+                    # If not, create a new order and assign it here
+                    order = latest_order.pk,
+                    menuitem = order_item.menuitem,
+                    quantity = order_item.quantity,
+                    unit_price = order_item.unit_price,
+                    price = order_item.price
+                )
+                order_items.append(new_order_item)
+            # Save new Order Items recods to the Order Item model
+            OrderItem.objects.bulk_create(order_items)
+            # Delete the items from the user's cart
+            cart.delete()
+            # Delete all the items in the user's curerent table
+            serializer = OrderSerializer(data = cart, many=True)
             if serializer.is_valid():
                 serializer.save(user=user)
-            return Response(serializer.data,status=status.HTTP_201_CREATED)
+                return Response(serializer.data,status=status.HTTP_201_CREATED)
         return Response(serializer.data,status=status.HTTP_400_BAD_REQUEST)
+    
+# A specific order
