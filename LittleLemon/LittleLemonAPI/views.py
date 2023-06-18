@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import *
 from django.contrib.auth.models import User, UserManager
 from .serializers import *
+from .utilities import *
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
@@ -26,6 +27,7 @@ manager_users = User.objects.filter(groups=manager_group)
 class ViewCreateMenuItems(generics.ListCreateAPIView):
     queryset =  MenuItem.objects.all()
     serializer_class = MenuItemsSerializer
+    
     def get_permissions(self):
         if(self.request.method=='GET'):
             return[]
@@ -151,18 +153,11 @@ def ListCreateOrders(request):
             # Select all the order items with related orders
             order_items = OrderItem.objects.select_related('order').all()
             order_items_serializer = OrderItemSerializer(order_items, many=True)
-            
 
             # Arrange the elemetnts neatly
-            for order in orders_serializer.data:
-                for order_item in order_items_serializer.data:
-                    if order['id'] == order_item['order']:
-                        if 'menu-items' not in order.keys():
-                            order['menu-items'] = [order_item]
-                        else:
-                            order['menu-items'].append(order_item)
-            
-            return Response(orders_serializer.data, status.HTTP_200_OK)
+            data = match_order_items(orders_serializer.data, order_items_serializer.data)
+
+            return Response(data, status.HTTP_200_OK)
     # Delivery permissions: View orders assigned to them that haven't been delivered
     elif is_delivery: 
         if request.method == 'GET':
@@ -176,13 +171,7 @@ def ListCreateOrders(request):
             order_items_serializer = OrderItemSerializer(order_items, many=True)
 
             # Arrange the elements neatly
-            for order in orders_serializer.data:
-                for order_item in order_items_serializer.data:
-                    if order['id'] == order_item['order']:
-                        if 'menu-items' not in order.keys():
-                            order['menu-items'] = [order_item]
-                        else:
-                            order['menu-items'].append(order_item)
+            data = match_order_items(orders_serializer.data, order_items_serializer.data)
             
             return Response(orders_serializer.data, status.HTTP_200_OK)
     # Client permissions: View and edit their own orders
@@ -190,17 +179,14 @@ def ListCreateOrders(request):
         if request.method == 'GET':
             # Retrieve all the orders created by the user
             orders = Order.objects.filter(user=user)
-            order_serializer = OrderSerializer(orders, many=True)
+            orders_serializer = OrderSerializer(orders, many=True)
 
             # Retrieve order items for each order
             order_items = OrderItem.objects.filter(order__in=orders)
             order_items_serializer = OrderItemSerializer(order_items, many=True)
             
             # Combine orders and order items in the response
-            data = {
-                'orders':order_serializer.data,
-                'items':order_items_serializer.data
-            }
+            data = match_order_items(orders_serializer.data, order_items_serializer.data)
 
             return Response(data, status.HTTP_200_OK)
         if request.method == 'POST':
@@ -241,40 +227,41 @@ def ListCreateOrders(request):
 
 def DeleteUpdateView(request, pk):
     user = request.user
-    is_manager = User.objects.filter(pk=user.id, groups=delivery_group)
-    is_delivery = User.objects.filter(pk=user.id, groups=manager_group)
+    is_manager = User.objects.filter(pk=user.id, groups=manager_group)
+    is_delivery = User.objects.filter(pk=user.id, groups=delivery_group)
     user = get_object_or_404(User, id=user.id)
     order = get_object_or_404(Order, pk=pk)
     # Manager permissions: Delete order, get all orders, assign a crew
     # member to a specific order
-    if is_manager:
-        if request.method == 'PUT':
-            # Check if the delivery staff ID is provided in the
-            # request body
-            delivery_staff_id = request.data.get('delivery_crew')
-            if delivery_staff_id is not None:
-                # Retrieve the delivery staff user order 
-                delivery_staff = get_object_or_404(User, p=delivery_staff_id)
-                
-                # Assign the delivery staff for the order
-                order.delivey_crew = delivery_staff
-                order.save()
-
-                serializer = OrderSerializer(order)
-                return Response(serializer.data)
+    if is_manager:         
         # Update the order status: (0) for out of delivery (1) for delivered
         if request.method == 'PATCH':
-            order.status = request.data.get('status')
+            # Handle the status update
+            if 'status' in request.data.keys():
+                order.status = request.data.get('status')
+
+            # Check if the delivery staff ID is provided in the
+            # request body
+            if 'delivery_crew' in request.data.keys():
+                delv_id = request.data.get('delivery_crew')
+                # Retrieve the delivery staff user order 
+                delivery_staff = get_object_or_404(delivery_users, pk=delv_id)
+                
+                # Assign the delivery staff for the order
+                order.delivery_crew = delivery_staff
+
             order.save()
             serializer = OrderSerializer(order)
-            return Response(serializer.data)
-                # Remove the order from the server
+
+            return Response(serializer.data, status.HTTP_200_OK)
+        
+        # Remove the order from the server
         if request.method == 'DELETE': 
             order.delete()
             return Response({'message':'record deleted'}, status.HTTP_200_OK)
         return Response(status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    if is_delivery:
+    elif is_delivery:
         if request.method == 'PATCH':
             order.status = request.data.get('status')
             order.save()
@@ -285,7 +272,8 @@ def DeleteUpdateView(request, pk):
         if request.method == 'GET':
             if user == order.user:
                 serializer = OrderSerializer(order)
-                return Response(serializer.data)
+                return Response(serializer.data, status.HTTP_200_OK)
+            
     return Response({'message':'Not allowed to view this item'}, status.HTTP_401_UNAUTHORIZED)
 
 ##################################

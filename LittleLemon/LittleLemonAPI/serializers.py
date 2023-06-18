@@ -20,12 +20,12 @@ class MenuItemsSerializer(serializers.ModelSerializer):
 class SuperuserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User_model
-        fields = ['username','email']
+        fields = ['id','username','email']
     
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User_model
-        fields = ['username', 'email']
+        fields = ['id','username', 'email']
 
 
 class CartSerializer(serializers.ModelSerializer):
