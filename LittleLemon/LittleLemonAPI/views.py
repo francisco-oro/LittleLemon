@@ -139,8 +139,8 @@ def ViewAddDeleteCartItems(request):
 # Multiple Orders 
 def ListCreateOrders(request):
     user = request.user
-    is_manager = User.objects.filter(pk=user.id, groups=delivery_group)
-    is_delivery = User.objects.filter(pk=user.id, groups=manager_group)
+    is_manager = User.objects.filter(pk=user.id, groups=manager_group)
+    is_delivery = User.objects.filter(pk=user.id, groups=delivery_group)
     # Manager permissions: View
     if is_manager:
         if request.method == 'GET':
@@ -152,19 +152,39 @@ def ListCreateOrders(request):
             order_items = OrderItem.objects.select_related('order').all()
             order_items_serializer = OrderItemSerializer(order_items, many=True)
             
-            # Arrange the values in a dictionary
-            data = {
-                'orders': orders_serializer.data,
-                'order_items': order_items_serializer.data
-            }
 
-            return Response(data, status.HTTP_200_OK)
+            # Arrange the elemetnts neatly
+            for order in orders_serializer.data:
+                for order_item in order_items_serializer.data:
+                    if order['id'] == order_item['order']:
+                        if 'menu-items' not in order.keys():
+                            order['menu-items'] = [order_item]
+                        else:
+                            order['menu-items'].append(order_item)
+            
+            return Response(orders_serializer.data, status.HTTP_200_OK)
     # Delivery permissions: View orders assigned to them that haven't been delivered
     elif is_delivery: 
         if request.method == 'GET':
-            orders = Order.objects.get(delivery_crew=user, status=False)
-            serializer = OrderSerializer(orders, many=True)
-            return Response(serializer.data)
+            # Retrieve all the orders assigned to the current delivery user
+            orders = Order.objects.filter(delivery_crew=user, status=False)
+            orders_serializer = OrderSerializer(orders, many=True)
+            # Retrieve each order's unique primary key 
+            orders_keys = [order['id'] for order in orders_serializer.data]
+            # Retrieve all the order items with such orders
+            order_items = OrderItem.objects.select_related('order').filter(order__in = orders_keys)
+            order_items_serializer = OrderItemSerializer(order_items, many=True)
+
+            # Arrange the elements neatly
+            for order in orders_serializer.data:
+                for order_item in order_items_serializer.data:
+                    if order['id'] == order_item['order']:
+                        if 'menu-items' not in order.keys():
+                            order['menu-items'] = [order_item]
+                        else:
+                            order['menu-items'].append(order_item)
+            
+            return Response(orders_serializer.data, status.HTTP_200_OK)
     # Client permissions: View and edit their own orders
     else:
         if request.method == 'GET':

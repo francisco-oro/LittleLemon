@@ -169,9 +169,9 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 
 - [x] Api endpoints
 - [x] Menu-items endpoints
-- [ ] User group management endpoints
-- [ ] Cart management endpoints 
-- [ ] Order management endpoints
+- [x] User group management endpoints
+- [x] Cart management endpoints 
+- [x] Order management endpoints
 - [ ] Additional Steps
 - [ ] Throttling\
 See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of proposed features (and known issues).
