@@ -29,55 +29,22 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CartSerializer(serializers.ModelSerializer):
-    # Inputs allowed from the user : menuitem and quantity
-    # There's already a unique_together description declared in the Cart model 
     user = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), 
+        queryset=User.objects.all(),
         default = serializers.CurrentUserDefault()
     )
     menuitem = serializers.PrimaryKeyRelatedField(
-        queryset=MenuItem.objects.all()
+        queryset = MenuItem.objects.all()
     )
     quantity = serializers.DecimalField(max_digits=6, decimal_places=2)
-    # Calculate the total price for the current item instance
-    price = serializers.SerializerMethodField(method_name= 'calculate_price')
-    unit_price = serializers.SerializerMethodField(method_name='get_unit_price')
-
-    # Calculate the total price
-    def calculate_price(self):
-        return self.quantity * self.menuitem.price
-    # Return the price per items bought
-    def get_unit_price(self):
-        return self.menuitem.price
-
     class Meta:
         model = Cart
-        fields = ['user', 'menuitem', 'quantity', 'unit_price', 'price']
-        # Limit the input accepted by quantity
-        extra_kwargs = {
-            'quantity' : {
-                'min_value': 1,
-                'max_value': 100,
-            }
-        }
-
-
-class OrderItemSerializer(serializers.ModelSerializer):
-    order = serializers.PrimaryKeyRelatedField(
-        queryset=Order.objects.all()
-    )
-    menuitem = serializers.PrimaryKeyRelatedField(
-        queryset=MenuItem.objects.all()
-    )
-    unit_price = serializers.DecimalField(max_digits=6, decimal_places=2)
-    quantity = serializers.DecimalField(max_digits=6, decimal_places=2)
-    price = serializers.SerializerMethodField(method_name='calculate_price')
-    def calculate_price(self, product:OrderItem):
-        return product.unit_price * product.quantity
-    class Meta:
-        model = OrderItem
-        fields = '__all__'
-    
+        fields = ['id', 'user', 'menuitem','quantity','unit_price','price']
+    def create(self, validated_data):
+        return Cart.objects.create(**validated_data)
+    def update(self, instance, validated_data):
+        instance.quantity = validated_data.get('quantity',instance.quantity)
+  
 
 class OrderSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(
@@ -89,8 +56,28 @@ class OrderSerializer(serializers.ModelSerializer):
     )
     status = serializers.BooleanField(default=False)
     date = serializers.DateField(default = datetime.datetime.now())
-    quantity = serializers.DecimalField(max_digits=6, decimal_places=2)
-    orders = OrderItemSerializer
+    total = serializers.DecimalField(max_digits=6, decimal_places=2)
+    order_items = serializers.SerializerMethodField(method_name='get_order_names')
+
+    def get_order_items(self,order):
+        order_items = OrderItem.objects.filter(order=order)
+        order_items_serializer = OrderItemSerializer(order_items, many=True)
+        return order_items_serializer.data
+
     class Meta:
         model=Order
-        fields=['user','delivery_crew','status','date','quantity','orders']
+        fields=['id','user','delivery_crew','status','date','total', 'order_items']
+    
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    order = serializers.PrimaryKeyRelatedField(
+        queryset=Order.objects.all()
+    )
+    menuitem = serializers.PrimaryKeyRelatedField(
+        queryset=MenuItem.objects.all()
+    )
+    quantity = serializers.DecimalField(max_digits=6, decimal_places=2)
+    class Meta:
+        model = OrderItem
+        fields = '__all__'

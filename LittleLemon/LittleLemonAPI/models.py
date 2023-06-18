@@ -46,7 +46,7 @@ class Order(models.Model):
 
 # All the items from the cart will be moved here with the link to the newly created, then those cart items will be deleted. 
 class OrderItem(models.Model):
-    order = models.ForeignKey(User, on_delete=models.CASCADE)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
     menuitem = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
     quantity = models.DecimalField(max_digits=6, decimal_places=2)
     unit_price = models.DecimalField(max_digits=6, decimal_places=2)
