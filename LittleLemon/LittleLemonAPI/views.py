@@ -4,6 +4,7 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.filters import SearchFilter
 from .models import *
 from django.contrib.auth.models import User, UserManager
 from .serializers import *
@@ -16,6 +17,7 @@ import secrets
 import string
 import json
 
+
 # Models and global variables
 user_model = get_user_model()
 delivery_group = Group.objects.get(name='Delivery')
@@ -24,10 +26,17 @@ manager_group = Group.objects.get(name='Manager')
 delivery_users = User.objects.filter(groups=delivery_group)
 manager_users = User.objects.filter(groups=manager_group)
 
+##################################
+#  Menu-items endpoints
+##################################
+
 class ViewCreateMenuItems(generics.ListCreateAPIView):
-    queryset =  MenuItem.objects.all()
+    queryset =  MenuItem.objects.filter()
     serializer_class = MenuItemsSerializer
-    
+
+    filter_backends = [SearchFilter]
+    sarch_fields = ['price','category','title']
+
     def get_permissions(self):
         if(self.request.method=='GET'):
             return[]
@@ -143,6 +152,7 @@ def ListCreateOrders(request):
     user = request.user
     is_manager = User.objects.filter(pk=user.id, groups=manager_group)
     is_delivery = User.objects.filter(pk=user.id, groups=delivery_group)
+
     # Manager permissions: View
     if is_manager:
         if request.method == 'GET':
