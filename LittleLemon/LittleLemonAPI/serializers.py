@@ -57,16 +57,10 @@ class OrderSerializer(serializers.ModelSerializer):
     status = serializers.BooleanField(default=False)
     date = serializers.DateField(default = datetime.datetime.now())
     total = serializers.DecimalField(max_digits=6, decimal_places=2)
-    order_items = serializers.SerializerMethodField(method_name='get_order_names')
-
-    def get_order_items(self,order):
-        order_items = OrderItem.objects.filter(order=order)
-        order_items_serializer = OrderItemSerializer(order_items, many=True)
-        return order_items_serializer.data
 
     class Meta:
         model=Order
-        fields=['id','user','delivery_crew','status','date','total', 'order_items']
+        fields=['id','user','delivery_crew','status','date','total']
     
 
 
